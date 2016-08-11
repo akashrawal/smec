@@ -2,8 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-#TODO: Enter github address
-AC_INIT([SME],[0.0.0],[],[sme],[https://github.com/akashrawal/])
+AC_INIT([SME],[0.0.0],[],[sme],[https://github.com/akashrawal/smec])
 AC_CONFIG_SRCDIR([sme/incl.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([-Wall -Werror silent-rules])
