@@ -24,10 +24,15 @@
 #include <string.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #include <mmc/mmc.h>
 #include <ssc/ssc.h>
 
 //Include all modules in dependency-based order
 
+#include "channel.h"
 
+#define sme_error(...) mmc_context_error("SME", __VA_ARGS__)
+#define sme_warn(...) mmc_context_warn("SME", __VA_ARGS__) 
+	//

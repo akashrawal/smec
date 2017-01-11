@@ -7,7 +7,6 @@ AC_CONFIG_SRCDIR([sme/incl.h])
 AC_CONFIG_MACRO_DIR([m4])
 AM_INIT_AUTOMAKE([-Wall -Werror silent-rules])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
-AM_MAINTAINER_MODE
 AM_PROG_AR
 LT_INIT
 
