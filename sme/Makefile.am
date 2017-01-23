@@ -10,11 +10,12 @@ lib_LTLIBRARIES = libsme.la
 #
 #EXTRA_DIST = simple_router.mdl
 
-sme_c = channel.c
+sme_c = msg.c \
+		channel.c
 
 sme_h = incl.h \
+		msg.h \
 		channel.h
-
 
 libsme_la_SOURCES = $(sme_c) $(sme_h)
 #nodist_libsme_la_SOURCES = 

@@ -29,9 +29,8 @@ typedef struct
 	int enabled;
 	IovQueue iov[1];
 	IntQueue compl[1];
-	void *receiver;
-	SmeChannelCompletionFn cfn;
 	int n_pending_compl;
+	SmeJobSource source;
 } ChannelLane;
 
 struct _SmeFdChannel
@@ -46,51 +45,56 @@ struct _SmeFdChannel
 static void channel_lane_init(ChannelLane *lane)
 {
 	lane->enabled = 0;
-	lane->receiver = NULL;
-	lane->cfn = NULL;
 }
 
-static void channel_lane_set_receiver
-	(ChannelLane *lane, void *receiver, SmeChannelCompletionFn cfn)
+static void channel_lane_add_job_fn
+	(void *ptr, SscMBlock *blocks, size_t n_blocks)
 {
-	if (! cfn)
-		receiver = NULL;
-
-	if (lane->enabled == 0)
-	{
-		if (cfn)
-		{
-			lane->enabled = 1;
-			iov_queue_init(lane->iov);
-			int_queue_init(lane->compl);
-			lane->n_pending_compl = 0;
-		}
-	}
-	else
-	{
-		if (!cfn)
-		{
-			lane->enabled = 0;
-			iov_queue_destroy(lane->iov);
-			int_queue_destroy(lane->compl);
-		}
-	}
-
-	lane->receiver = receiver;
-	lane->cfn = cfn;
-}
-
-static void channel_lane_add_job
-	(ChannelLane *lane, struct iovec *blocks, size_t n_blocks)
-{
+	ChannelLane *lane = ptr;
+	
 	struct iovec *allocd;
 	int i;
 
 	allocd = iov_queue_alloc_n(lane->iov, n_blocks);
 	for (i = 0; i < n_blocks; i++)
-		allocd[i] = blocks[i];
+	{
+		allocd[i].iov_base = blocks[i].mem;
+		allocd[i].iov_len  = blocks[i].len;
+	}
 
 	int_queue_push(lane->compl, (int) n_blocks);
+}
+
+static void channel_lane_set_source
+	(ChannelLane *lane, SmeJobSource source)
+{
+	SmeChannel vtable = {lane, channel_lane_add_job_fn};
+
+	if (lane->enabled)
+	{
+		sme_error("Cannot set source more than once");	
+	}
+
+	lane->source = source;
+	lane->enabled = 1;
+	lane->n_pending_compl = 0;
+	iov_queue_init(lane->iov);
+	int_queue_init(lane->compl);
+
+	if (source.set_channel)
+		(*source.set_channel)(source.source_ptr, vtable); 
+}
+
+static void channel_lane_disable(ChannelLane *lane)
+{
+	if (lane->enabled)
+	{
+		if (lane->source.unset_channel)
+			(*lane->source.unset_channel)(lane->source.source_ptr);
+		lane->enabled = 0;
+		iov_queue_destroy(lane->iov);
+		int_queue_destroy(lane->compl);
+	}
 }
 
 static void channel_lane_pop_bytes(ChannelLane *lane, size_t n_bytes)
@@ -136,6 +140,8 @@ static void channel_lane_pop_bytes(ChannelLane *lane, size_t n_bytes)
 
 #define channel_lane_io(lane, fd, fn, res) \
 do { \
+	if (! lane->enabled) \
+		sme_error("No job source"); \
 	res = fn(fd, iov_queue_head(lane->iov), iov_queue_size(lane->iov)); \
 	if (res > 0) \
 		channel_lane_pop_bytes(lane, res); \
@@ -145,7 +151,9 @@ static void channel_lane_inform_completion(ChannelLane *lane)
 {
 	if (lane->n_pending_compl)
 	{
-		(* lane->cfn)(lane->receiver, lane->n_pending_compl);
+		if (lane->source.notify)
+			(* lane->source.notify)
+				(lane->source.source_ptr, lane->n_pending_compl);
 		lane->n_pending_compl = 0;
 	}
 }
@@ -171,21 +179,15 @@ SmeFdChannel *sme_fd_channel_new(int fd)
 
 static void sme_fd_channel_destroy(SmeFdChannel *channel)
 {
-	channel_lane_set_receiver(channel->write, NULL, NULL);
-	channel_lane_set_receiver(channel->read, NULL, NULL);
+	channel_lane_disable(channel->write);
+	channel_lane_disable(channel->read);
 }
 
 //Writing
-void sme_fd_channel_set_write_receiver
-	(SmeFdChannel *channel, void *receiver, SmeChannelCompletionFn comp_fn)
+void sme_fd_channel_set_write_source
+	(SmeFdChannel *channel, SmeJobSource source)
 {
-	channel_lane_set_receiver(channel->write, receiver, comp_fn);
-}
-
-void sme_fd_channel_add_write_job
-	(SmeFdChannel *channel, struct iovec *blocks, size_t n_blocks)
-{
-	channel_lane_add_job(channel->write, blocks, n_blocks);
+	channel_lane_set_source(channel->write, source);
 }
 
 ssize_t sme_fd_channel_write(SmeFdChannel *channel)
@@ -201,16 +203,10 @@ void sme_fd_channel_inform_write_completion(SmeFdChannel *channel)
 }
 
 //Reading
-void sme_fd_channel_set_read_receiver
-	(SmeFdChannel *channel, void *receiver, SmeChannelCompletionFn comp_fn)
+void sme_fd_channel_set_read_source
+	(SmeFdChannel *channel, SmeJobSource source)
 {
-	channel_lane_set_receiver(channel->read, receiver, comp_fn);
-}
-
-void sme_fd_channel_add_read_job
-	(SmeFdChannel *channel, struct iovec *blocks, size_t n_blocks)
-{
-	channel_lane_add_job(channel->read, blocks, n_blocks);
+	channel_lane_set_source(channel->read, source);
 }
 
 ssize_t sme_fd_channel_read(SmeFdChannel *channel)

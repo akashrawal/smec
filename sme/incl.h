@@ -31,6 +31,7 @@
 
 //Include all modules in dependency-based order
 
+#include "msg.h"
 #include "channel.h"
 
 #define sme_error(...) mmc_context_error("SME", __VA_ARGS__)
