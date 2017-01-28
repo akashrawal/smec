@@ -13,7 +13,8 @@ lib_LTLIBRARIES = libsme.la
 sme_c = msg.c \
 		channel.c
 
-sme_h = incl.h \
+sme_h =	sme.h \
+        incl.h \
 		msg.h \
 		channel.h
 

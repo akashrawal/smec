@@ -20,6 +20,11 @@
 
 #include "incl.h"
 
+
+//TODO: Fix IOV_MAX stuff
+#include <limits.h> 
+#include <unistd.h>
+
 //Declarations
 mmc_declare_queue(struct iovec, IovQueue, iov_queue);
 mmc_declare_queue(int, IntQueue, int_queue);
@@ -39,6 +44,7 @@ struct _SmeFdChannel
 	int fd;
 
 	ChannelLane write[1], read[1];
+	size_t iov_max;
 };
 
 //Channel lane
@@ -138,11 +144,14 @@ static void channel_lane_pop_bytes(ChannelLane *lane, size_t n_bytes)
 	lane->n_pending_compl += job;
 }
 
-#define channel_lane_io(lane, fd, fn, res) \
+#define channel_lane_io(lane, fd, fn, iov_max, res) \
 do { \
 	if (! lane->enabled) \
 		sme_error("No job source"); \
-	res = fn(fd, iov_queue_head(lane->iov), iov_queue_size(lane->iov)); \
+	size_t size = iov_queue_size(lane->iov); \
+	if (size > iov_max) \
+		size = iov_max; \
+	res = fn(fd, iov_queue_head(lane->iov), size); \
 	if (res > 0) \
 		channel_lane_pop_bytes(lane, res); \
 } while (0)
@@ -158,6 +167,11 @@ static void channel_lane_inform_completion(ChannelLane *lane)
 	}
 }
 
+static int channel_lane_get_queue_len(ChannelLane *lane)
+{
+	return int_queue_size(lane->compl);
+}
+
 //Channel functions
 mmc_rc_define(SmeFdChannel, sme_fd_channel);
 
@@ -171,8 +185,16 @@ SmeFdChannel *sme_fd_channel_new(int fd)
 
 	channel->fd = fd;
 
+	//IOV_MAX restriction?
+#ifdef IOV_MAX
+	channel->iov_max = IOV_MAX;
+#else
+	channel->iov_max = sysconf(_SC_IOV_MAX);
+#endif
+
 	channel_lane_init(channel->write);
 	channel_lane_init(channel->read);
+	
 
 	return channel;
 }
@@ -181,6 +203,8 @@ static void sme_fd_channel_destroy(SmeFdChannel *channel)
 {
 	channel_lane_disable(channel->write);
 	channel_lane_disable(channel->read);
+
+	free(channel);
 }
 
 //Writing
@@ -193,13 +217,19 @@ void sme_fd_channel_set_write_source
 ssize_t sme_fd_channel_write(SmeFdChannel *channel)
 {
 	ssize_t res;
-	channel_lane_io(channel->write, channel->fd, writev, res);
+	channel_lane_io
+		(channel->write, channel->fd, writev, channel->iov_max, res);
 	return res;
 }
 
 void sme_fd_channel_inform_write_completion(SmeFdChannel *channel)
 {
 	channel_lane_inform_completion(channel->write);
+}
+
+int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel)
+{
+	return channel_lane_get_queue_len(channel->write);
 }
 
 //Reading
@@ -212,12 +242,18 @@ void sme_fd_channel_set_read_source
 ssize_t sme_fd_channel_read(SmeFdChannel *channel)
 {
 	ssize_t res;
-	channel_lane_io(channel->read, channel->fd, readv, res);
+	channel_lane_io
+		(channel->read, channel->fd, readv, channel->iov_max, res);
 	return res;
 }
 
 void sme_fd_channel_inform_read_completion(SmeFdChannel *channel)
 {
 	channel_lane_inform_completion(channel->read);
+}
+
+int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel)
+{
+	return channel_lane_get_queue_len(channel->read);
 }
 

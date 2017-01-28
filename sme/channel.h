@@ -35,6 +35,8 @@ ssize_t sme_fd_channel_write(SmeFdChannel *channel);
 
 void sme_fd_channel_inform_write_completion(SmeFdChannel *channel);
 
+int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel);
+
 //Reading
 void sme_fd_channel_set_read_source
 	(SmeFdChannel *channel, SmeJobSource source);
@@ -43,4 +45,5 @@ ssize_t sme_fd_channel_read(SmeFdChannel *channel);
 
 void sme_fd_channel_inform_read_completion(SmeFdChannel *channel);
 
+int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel);
 
