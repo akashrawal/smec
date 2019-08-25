@@ -36,5 +36,7 @@ AC_CONFIG_FILES([Makefile
                  data/Makefile
                  data/sme.pc
                  sme/Makefile
+				 tests/Makefile
+				 tests/logcc.sh
                  ])
 AC_OUTPUT

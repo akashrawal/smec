@@ -1,5 +1,5 @@
-/* incl.h
- * Includes
+/* test_msg.c
+ * Unit test for msg.c
  * 
  * Copyright 2015 Akash Rawal
  * This file is part of Modular Middleware.
@@ -18,24 +18,12 @@
  * along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//TODO: Decide the includes in API headers
+#include <sme/sme.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <sys/uio.h>
 
-#include <mdsl/mdsl.h>
-#include <mmc/mmc.h>
-#include <ssc/ssc.h>
+int main()
+{
+	printf("Hello, world\n");
 
-//Include all modules in dependency-based order
-
-#include "iface.h"
-#include "msg.h"
-#include "channel.h"
-
-#define sme_error(...) mdsl_context_error("SME", __VA_ARGS__)
-#define sme_warn(...) mdsl_context_warn("SME", __VA_ARGS__) 
-	//
+	return 0;
+}

@@ -22,7 +22,7 @@
 //Implementation for file descriptor backend using libevent
 typedef struct _SmeFdChannel SmeFdChannel;
 
-mmc_rc_declare(SmeFdChannel, sme_fd_channel);
+mdsl_rc_declare(SmeFdChannel, sme_fd_channel);
 
 SmeFdChannel *sme_fd_channel_new(int fd);
 

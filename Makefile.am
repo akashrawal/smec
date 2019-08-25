@@ -1,5 +1,5 @@
 
-SUBDIRS = data sme
+SUBDIRS = data sme tests
 
 ACLOCAL_AMFLAGS = -I m4
 

@@ -26,8 +26,8 @@
 #include <unistd.h>
 
 //Declarations
-mmc_declare_queue(struct iovec, IovQueue, iov_queue);
-mmc_declare_queue(int, IntQueue, int_queue);
+mdsl_declare_queue(struct iovec, IovQueue, iov_queue);
+mdsl_declare_queue(int, IntQueue, int_queue);
 
 typedef struct 
 {
@@ -40,7 +40,7 @@ typedef struct
 
 struct _SmeFdChannel
 {
-	MmcRC parent;
+	MdslRC parent;
 	int fd;
 
 	ChannelLane write[1], read[1];
@@ -119,7 +119,7 @@ static void channel_lane_pop_bytes(ChannelLane *lane, size_t n_bytes)
 	}
 	if (i < len)
 	{
-		dv[i].iov_base = MMC_PTR_ADD(dv[i].iov_base, n_bytes);
+		dv[i].iov_base = MDSL_PTR_ADD(dv[i].iov_base, n_bytes);
 		dv[i].iov_len -= n_bytes;
 	}
 	blk = i;
@@ -173,15 +173,15 @@ static int channel_lane_get_queue_len(ChannelLane *lane)
 }
 
 //Channel functions
-mmc_rc_define(SmeFdChannel, sme_fd_channel);
+mdsl_rc_define(SmeFdChannel, sme_fd_channel);
 
 SmeFdChannel *sme_fd_channel_new(int fd)
 {
 	SmeFdChannel *channel;
 
-	channel = (SmeFdChannel *) mmc_alloc(sizeof(SmeFdChannel));
+	channel = (SmeFdChannel *) mdsl_alloc(sizeof(SmeFdChannel));
 
-	mmc_rc_init(channel);
+	mdsl_rc_init(channel);
 
 	channel->fd = fd;
 

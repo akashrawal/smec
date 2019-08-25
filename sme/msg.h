@@ -18,29 +18,13 @@
  * along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//Interface channel should present to job source
-typedef struct 
-{
-	void *channel_ptr;
-	void (*add_job)(void *channel_ptr, SscMBlock *blocks, size_t n_blocks);
-} SmeChannel;
-
-//Interface a job source should present to channel.
-typedef struct
-{
-	void *source_ptr;
-
-	void (*set_channel)(void *source_ptr, SmeChannel channel);
-	void (*unset_channel)(void *source_ptr);
-	void (*notify)(void *source_ptr, int n_jobs);
-} SmeJobSource;
 
 //Uses protocol as described in ssc/msg.h
 
 //Message writer
 typedef struct _SmeMsgWriter SmeMsgWriter;
 
-mmc_rc_declare(SmeMsgWriter, sme_msg_writer);
+mdsl_rc_declare(SmeMsgWriter, sme_msg_writer);
 
 SmeMsgWriter *sme_msg_writer_new();
 
@@ -54,7 +38,7 @@ int sme_msg_writer_get_queue_len(SmeMsgWriter *writer);
 //Message reader
 typedef struct _SmeMsgReader SmeMsgReader;
 
-mmc_rc_declare(SmeMsgReader, sme_msg_reader);
+mdsl_rc_declare(SmeMsgReader, sme_msg_reader);
 
 SmeMsgReader *sme_msg_reader_new();
 

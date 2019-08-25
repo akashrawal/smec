@@ -15,6 +15,7 @@ sme_c = msg.c \
 
 sme_h =	sme.h \
         incl.h \
+		iface.h \
 		msg.h \
 		channel.h
 

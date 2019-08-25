@@ -35,11 +35,12 @@ typedef struct
 	MmcMsg *msg;
 	uint32_t *preamble;
 } WriterJob;
-mmc_declare_queue(WriterJob, WriterJobQueue, writer_job_queue);
+
+mdsl_declare_queue(WriterJob, WriterJobQueue, writer_job_queue);
 
 struct _SmeMsgWriter
 {
-	MmcRC parent;
+	MdslRC parent;
 
 	WriterState state;
 	SmeChannel channel;
@@ -88,7 +89,7 @@ static void sme_msg_writer_notify_fn(void *source_ptr, int n_jobs)
 }
 
 //
-mmc_rc_define(SmeMsgWriter, sme_msg_writer);
+mdsl_rc_define(SmeMsgWriter, sme_msg_writer);
 
 static void sme_msg_writer_destroy(SmeMsgWriter *writer)
 {
@@ -112,9 +113,9 @@ SmeMsgWriter *sme_msg_writer_new()
 {
 	SmeMsgWriter *writer;
 
-	writer = (SmeMsgWriter *) mmc_alloc(sizeof(SmeMsgWriter));
+	writer = (SmeMsgWriter *) mdsl_alloc(sizeof(SmeMsgWriter));
 
-	mmc_rc_init(writer);
+	mdsl_rc_init(writer);
 	
 	writer->state = WRITER_INACTIVE;
 	writer_job_queue_init(writer->job_queue); 
@@ -148,10 +149,10 @@ void sme_msg_writer_add_msg(SmeMsgWriter *writer, MmcMsg *msg)
 	//Create job
 	new_job.msg = msg;
 	mmc_msg_ref(msg);
-	iov = (SscMBlock *) mmc_alloc(sizeof(SscMBlock) * (len + 1));
+	iov = (SscMBlock *) mdsl_alloc(sizeof(SscMBlock) * (len + 1));
 
 	//Add preamble (size + layout)
-	new_job.preamble = (uint32_t *) mmc_alloc
+	new_job.preamble = (uint32_t *) mdsl_alloc
 		((len + 1) * sizeof(uint32_t));
 	new_job.preamble[0] = ssc_uint32_to_le((uint32_t) len);
 	ssc_msg_create_layout(msg, len, new_job.preamble + 1);	
@@ -189,11 +190,11 @@ typedef enum
 	READER_ERROR
 } ReaderState;
 
-mmc_declare_queue(MmcMsg*, MsgQueue, msg_queue);
+mdsl_declare_queue(MmcMsg*, MsgQueue, msg_queue);
 
 struct _SmeMsgReader
 {
-	MmcRC parent;
+	MdslRC parent;
 
 
 	ReaderState state;
@@ -235,7 +236,7 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 
 		//Allocate memory for layout
 		iov.len = size * sizeof(uint32_t);
-		iov.mem = mmc_tryalloc(iov.len);
+		iov.mem = mdsl_tryalloc(iov.len);
 		if (! iov.mem)
 			goto fail;
 		
@@ -262,7 +263,7 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 
 
 		//Allocate  vector
-		iov = (SscMBlock *) mmc_tryalloc(sizeof(SscMBlock) * size);
+		iov = (SscMBlock *) mdsl_tryalloc(sizeof(SscMBlock) * size);
 		if (! iov)
 		{
 			free(layout);
@@ -358,7 +359,7 @@ static void sme_msg_reader_notify_fn(void *source_ptr, int n_jobs)
 }
 
 //
-mmc_rc_define(SmeMsgReader, sme_msg_reader);
+mdsl_rc_define(SmeMsgReader, sme_msg_reader);
 
 static void sme_msg_reader_destroy(SmeMsgReader *reader)
 {
@@ -386,9 +387,9 @@ SmeMsgReader *sme_msg_reader_new()
 {
 	SmeMsgReader *reader;
 
-	reader = (SmeMsgReader *) mmc_alloc(sizeof(SmeMsgReader));
+	reader = (SmeMsgReader *) mdsl_alloc(sizeof(SmeMsgReader));
 
-	mmc_rc_init(reader);
+	mdsl_rc_init(reader);
 
 	msg_queue_init(reader->msg_queue);
 	reader->state = READER_INACTIVE;

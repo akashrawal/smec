@@ -1,0 +1,53 @@
+#!/bin/sh
+
+#logcc.sh.in
+#Log compiler for running each test correctly
+
+#Copyright 2015-2019 Akash Rawal
+#This file is part of Modular Middleware.
+#
+#Modular Middleware is free software: you can redistribute it and/or modify
+#it under the terms of the GNU General Public License as published by
+#the Free Software Foundation, either version 3 of the License, or
+#(at your option) any later version.
+#
+#Modular Middleware is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#GNU General Public License for more details.
+#
+#You should have received a copy of the GNU General Public License
+#along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
+
+top_builddir="@top_builddir@"
+srcdir="@srcdir@"
+builddir="@builddir@"
+
+vg_cmd="valgrind --track-origins=yes --leak-check=full --show-leak-kinds=all"
+vg_cmd="$vg_cmd --error-exitcode=3"
+
+testcase="$1"
+target="${testcase/$srcdir/$builddir}.test"
+
+print_exec() {
+	echo "Running command $@"
+	exec "$@"
+}
+
+run_program() {
+	if test "$VALGRIND_TESTS" = 1; then
+		print_exec libtool --mode=execute $vg_cmd "$@"
+	else
+		print_exec "$@"
+	fi
+}
+
+ext="${testcase##*.}"
+if test "$ext" == "txt"; then
+	#run_program "$top_builddir/sidc/sidc" "$testcase" "${target}"
+	echo "Compiling SID is not supported yet"
+	exit 1
+else
+	run_program "$testcase"
+fi
+
