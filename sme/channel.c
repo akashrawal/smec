@@ -257,3 +257,19 @@ int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel)
 	return channel_lane_get_queue_len(channel->read);
 }
 
+//Testing
+ssize_t sme_fd_channel_test_write(SmeFdChannel *channel, SmeVectorIOFn fn)
+{
+	ssize_t res;
+	channel_lane_io
+		(channel->write, channel->fd, (*fn), channel->iov_max, res);
+	return res;
+}
+
+ssize_t sme_fd_channel_test_read(SmeFdChannel *channel, SmeVectorIOFn fn)
+{
+	ssize_t res;
+	channel_lane_io
+		(channel->read, channel->fd, (*fn), channel->iov_max, res);
+	return res;
+}

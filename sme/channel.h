@@ -24,6 +24,7 @@ typedef struct _SmeFdChannel SmeFdChannel;
 
 mdsl_rc_declare(SmeFdChannel, sme_fd_channel);
 
+
 SmeFdChannel *sme_fd_channel_new(int fd);
 
 
@@ -47,3 +48,14 @@ void sme_fd_channel_inform_read_completion(SmeFdChannel *channel);
 
 int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel);
 
+//Testing
+#ifndef SME_PUBLIC_HEADER
+
+typedef ssize_t (*SmeVectorIOFn)(int fd, struct iovec *iov, size_t iov_len);
+
+ssize_t sme_fd_channel_test_write(SmeFdChannel *channel, SmeVectorIOFn fn);
+
+ssize_t sme_fd_channel_test_read(SmeFdChannel *channel, SmeVectorIOFn fn);
+
+
+#endif //SME_PUBLIC_HEADER

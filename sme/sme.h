@@ -21,6 +21,8 @@
 #ifndef SME_H_INCLUDED
 #define SME_H_INCLUDED
 
+#define SME_PUBLIC_HEADER
 #include "incl.h"
+#undef SME_PUBLIC_HEADER
 
 #endif //SME_H_INCLUDED
