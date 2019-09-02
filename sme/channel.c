@@ -152,7 +152,7 @@ do { \
 	if (size > iov_max) \
 		size = iov_max; \
 	res = fn(fd, iov_queue_head(lane->iov), size); \
-	if (res > 0) \
+	if (res >= 0) \
 		channel_lane_pop_bytes(lane, res); \
 } while (0)
 

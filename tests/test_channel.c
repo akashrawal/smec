@@ -42,9 +42,6 @@
 
 #define MAX_IOV  MAX_DEPTH
 
-//TODO: Add assertions on completed jobs on termination
-//TODO: Add assertions on data read
-
 typedef enum
 {
 	INST_ADD_SEG,
@@ -162,6 +159,9 @@ typedef struct
 	int completed_jobs;
 	int used_blk;
 	SscMBlock blk[MAX_IOV];
+
+	int jobsizes[MAX_DEPTH + 1];
+	int iosize;
 } MockJobSource;
 
 static void mock_job_source_set_channel(void *jsptr, SmeChannel channel)
@@ -194,6 +194,11 @@ static void mock_job_source_init(MockJobSource *jobsource)
 	jobsource->submitted_jobs = 0;
 	jobsource->completed_jobs = 0;
 	jobsource->used_blk = 0;
+
+	jobsource->iosize = 0;
+	int i;
+	for (i = 0; i <= MAX_DEPTH; i++)
+		jobsource->jobsizes[i] = 0;
 }
 
 static void mock_job_source_add_blk(MockJobSource *jobsource,
@@ -202,6 +207,7 @@ static void mock_job_source_add_blk(MockJobSource *jobsource,
 	jobsource->blk[jobsource->used_blk].mem = mem;
 	jobsource->blk[jobsource->used_blk].len = size;
 	jobsource->used_blk++;
+	jobsource->jobsizes[jobsource->submitted_jobs] += size;
 }
 
 static void mock_job_source_add_job(MockJobSource *jobsource)
@@ -215,6 +221,25 @@ static void mock_job_source_add_job(MockJobSource *jobsource)
 
 	jobsource->used_blk = 0;
 	jobsource->submitted_jobs++;
+}
+
+static void mock_job_source_inform_io(MockJobSource *jobsource, int size)
+{
+	jobsource->iosize += size;
+
+	int extra = jobsource->iosize;
+	int i;
+	for (i = 0; i < jobsource->submitted_jobs; i++)
+	{
+		if (extra < jobsource->jobsizes[i])
+			break;
+		extra -= jobsource->jobsizes[i];
+	}
+
+	assert_equals_int(i, jobsource->completed_jobs);
+
+	if (i == jobsource->submitted_jobs)
+		assert_equals_int(extra, 0);
 }
 
 //Mock IO functions
@@ -248,6 +273,7 @@ ssize_t mock_io_readv(int fd, struct iovec *iov, size_t iov_len)
 	}
 
 	mock_bytes_read += k;
+	mock_io_size -= k;
 	return k;
 }
 
@@ -268,6 +294,7 @@ ssize_t mock_io_writev(int fd, struct iovec *iov, size_t iov_len)
 	}
 
 	mock_bytes_written += k;
+	mock_io_size -= k;
 	return k;
 }
 
@@ -317,16 +344,20 @@ static void op_commit_job()
 
 static void op_io(int size)
 {
-	//common:
-	mock_io_size = size;
-
 	//Write:
+	mock_io_size = size;
 	sme_fd_channel_test_write(channel, mock_io_writev);
 	sme_fd_channel_inform_write_completion(channel);
+	assert_equals_int(mock_io_size, 0);
+	mock_job_source_inform_io(write_source, size);
+	
 
 	//Read:
+	mock_io_size = size;
 	sme_fd_channel_test_read(channel, mock_io_readv);
 	sme_fd_channel_inform_read_completion(channel);
+	assert_equals_int(mock_io_size, 0);
+	mock_job_source_inform_io(read_source, size);
 }
 
 static void end_test_case(int io_size)
@@ -379,6 +410,8 @@ int main()
 			int64_array_append(indexes, j);
 		}
 
+		//Print program
+		/*
 		fprintf(stderr, "program[%d]: ", i);
 		for (j = int64_array_size(indexes) - 1; j >= 0; j--)
 		{
@@ -394,6 +427,7 @@ int main()
 			fprintf(stderr, "%d[%d] ", (int) inst->opcode, arg);
 		}
 		fprintf(stderr, "\n");
+		*/
 
 		//Actual testing
 		start_test_case();
