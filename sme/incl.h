@@ -38,4 +38,5 @@
 
 #define sme_error(...) mdsl_context_error("SME", __VA_ARGS__)
 #define sme_warn(...) mdsl_context_warn("SME", __VA_ARGS__) 
+#define sme_debug(...) mdsl_context_debug("SME", __VA_ARGS__) 
 	//

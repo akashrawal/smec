@@ -20,6 +20,7 @@
 
 #include <sme/incl.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 #define assert_equals_int(_a, _b) \
 	do {\
@@ -27,7 +28,8 @@
 		int64_t b = (_b); \
 		if (a != b) \
 		{ \
-			ssc_error("Assertion failed a == b (a = %lld, b = %lld", \
+			sme_error("Assertion failed a == b (a = %" PRId64 ", " \
+					"b = %" PRId64 ")", \
 					a, b); \
 		} \
 	} while (0)
@@ -169,11 +171,13 @@ static void mock_job_source_set_channel(void *jsptr, SmeChannel channel)
 	MockJobSource *jobsource = (MockJobSource *) jsptr;
 
 	jobsource->channel = channel;
+	jobsource->active = 1;
 }
 
 static void mock_job_source_unset_channel(void *jsptr)
 {
 	MockJobSource *jobsource = (MockJobSource *) jsptr;
+	jobsource->active = 0;
 }
 
 static void mock_job_source_notify(void *jsptr, int n_jobs)
@@ -385,6 +389,9 @@ static void end_test_case(int io_size)
 	}
 
 	sme_fd_channel_unref(channel);
+
+	assert_equals_int(write_source->active, 0);
+	assert_equals_int(read_source->active, 0);
 }
 
 int main()
@@ -395,7 +402,7 @@ int main()
 	generate_programs_rec(-1, MAX_IO, MAX_DEPTH, 0, 0, 0);
 
 	fprintf(stderr, 
-			"Program count: %d\n", program_array_size(program_array));
+			"Program count: %zu\n", program_array_size(program_array));
 
 	int i;
 	Int64Array indexes[1];
