@@ -1,7 +1,7 @@
 /* incl.h
  * Includes
  * 
- * Copyright 2015 Akash Rawal
+ * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
  * 
  * Modular Middleware is free software: you can redistribute it and/or modify
