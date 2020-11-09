@@ -17,7 +17,7 @@ AM_PROG_CC_C_O
 AC_PATH_PROG([SIDC], [sidc])
 
 # Checks for libraries.
-AC_CHECK_LIB([event_core], [event_base_new], [], [AC_MSG_ERROR(["could not find required library libevent_core"])])
+AC_CHECK_LIB([ev], [ev_io_start], [], [AC_MSG_ERROR(["could not find required library libev"])])
 PKG_CHECK_MODULES([MMC], [mmc >= 0.0.0])
 PKG_CHECK_MODULES([SSC], [ssc >= 0.0.0])
 
