@@ -160,10 +160,11 @@ static void channel_lane_inform_completion(ChannelLane *lane)
 {
 	if (lane->n_pending_compl)
 	{
+		int inform_compl = lane->n_pending_compl;
+		lane->n_pending_compl = 0;
 		if (lane->source.notify)
 			(* lane->source.notify)
-				(lane->source.source_ptr, lane->n_pending_compl);
-		lane->n_pending_compl = 0;
+				(lane->source.source_ptr, inform_compl);
 	}
 }
 

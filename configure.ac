@@ -5,6 +5,7 @@ AC_PREREQ([2.69])
 AC_INIT([SME],[0.0.0],[],[sme],[https://github.com/akashrawal/smec])
 AC_CONFIG_SRCDIR([sme/incl.h])
 AC_CONFIG_MACRO_DIR([m4])
+AC_CONFIG_AUX_DIR([auxdir])
 AM_INIT_AUTOMAKE([-Wall -Werror silent-rules])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 AM_PROG_AR
