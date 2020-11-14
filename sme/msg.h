@@ -38,13 +38,13 @@ int sme_msg_writer_get_queue_len(SmeMsgWriter *writer);
 //Message reader
 typedef struct _SmeMsgReader SmeMsgReader;
 
+typedef struct {
+	void (* call)(MmcMsg *msg, void *data);
+	void *data;	
+} SmeMsgReaderNotify;
+
 mdsl_rc_declare(SmeMsgReader, sme_msg_reader);
 
-SmeMsgReader *sme_msg_reader_new();
+SmeMsgReader *sme_msg_reader_new(SmeMsgReaderNotify notify);
 
 SmeJobSource sme_msg_reader_get_source(SmeMsgReader *reader);
-
-int sme_msg_reader_get_queue_len(SmeMsgReader *reader);
-
-MmcMsg *sme_msg_reader_pop_msg(SmeMsgReader *reader);
-

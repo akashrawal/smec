@@ -1,5 +1,5 @@
- /* channel.h
- * Fully managed interface to perform vectored IO over stream-like backends
+/* iface.h
+ * Interface between message [de]serializers and channel handlers
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -19,43 +19,19 @@
  */
 
 
-//Implementation for file descriptor backend using libevent
-typedef struct _SmeFdChannel SmeFdChannel;
+//Interface channel should present to job source
+typedef struct 
+{
+	void *channel_ptr;
+	void (*add_job)(void *channel_ptr, SscMBlock *blocks, size_t n_blocks);
+} SmeChannel;
 
-mdsl_rc_declare(SmeFdChannel, sme_fd_channel);
+//Interface a job source should present to channel.
+typedef struct
+{
+	void *source_ptr;
 
-
-SmeFdChannel *sme_fd_channel_new(int fd);
-
-
-//Writing
-void sme_fd_channel_set_write_source
-	(SmeFdChannel *channel, SmeJobSource source);
-
-ssize_t sme_fd_channel_write(SmeFdChannel *channel);
-
-void sme_fd_channel_inform_write_completion(SmeFdChannel *channel);
-
-int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel);
-
-//Reading
-void sme_fd_channel_set_read_source
-	(SmeFdChannel *channel, SmeJobSource source);
-
-ssize_t sme_fd_channel_read(SmeFdChannel *channel);
-
-void sme_fd_channel_inform_read_completion(SmeFdChannel *channel);
-
-int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel);
-
-//Testing
-#ifndef SME_PUBLIC_HEADER
-
-typedef ssize_t (*SmeVectorIOFn)(int fd, struct iovec *iov, size_t iov_len);
-
-ssize_t sme_fd_channel_test_write(SmeFdChannel *channel, SmeVectorIOFn fn);
-
-ssize_t sme_fd_channel_test_read(SmeFdChannel *channel, SmeVectorIOFn fn);
-
-
-#endif //SME_PUBLIC_HEADER
+	void (*set_channel)(void *source_ptr, SmeChannel channel);
+	void (*unset_channel)(void *source_ptr);
+	void (*notify)(void *source_ptr, int n_jobs);
+} SmeJobSource;

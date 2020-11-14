@@ -190,7 +190,6 @@ typedef enum
 	READER_ERROR
 } ReaderState;
 
-mdsl_declare_queue(MmcMsg*, MsgQueue, msg_queue);
 
 struct _SmeMsgReader
 {
@@ -200,7 +199,9 @@ struct _SmeMsgReader
 	ReaderState state;
 	SmeChannel channel;
 
-	MsgQueue msg_queue[1];
+	MmcMsg *msg_buf;
+
+	SmeMsgReaderNotify notify;
 	
 	uint32_t d;
 	void *layout;
@@ -285,7 +286,8 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 		if (n_blocks == 0)
 		{
 			//Add finished message to queue and return 
-			msg_queue_push(reader->msg_queue, msg);
+			sme_assert(! reader->msg_buf, "Message buffer overflow");
+			reader->msg_buf = msg;
 			sme_msg_reader_goto_read_size(reader);
 		}
 		else
@@ -310,7 +312,8 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 		reader->msg = NULL;
 
 		//Add finished message to queue and return 
-		msg_queue_push(reader->msg_queue, msg);
+		sme_assert(! reader->msg_buf, "Message buffer overflow");
+		reader->msg_buf = msg;
 		sme_msg_reader_goto_read_size(reader);
 	}
 
@@ -352,9 +355,16 @@ static void sme_msg_reader_notify_fn(void *source_ptr, int n_jobs)
 {
 	SmeMsgReader *reader = source_ptr;
 
-	while (n_jobs--)
+	sme_assert(n_jobs == 1, "Unexpected completion of %d jobs", n_jobs);
+
+	sme_msg_reader_advance(reader);
+
+	if (reader->msg_buf)
 	{
-		sme_msg_reader_advance(reader);
+		MmcMsg *msg_tmp = reader->msg_buf;
+		reader->msg_buf = NULL;
+
+		(* reader->notify.call)(msg_tmp, reader->notify.data);
 	}
 }
 
@@ -363,17 +373,10 @@ mdsl_rc_define(SmeMsgReader, sme_msg_reader);
 
 static void sme_msg_reader_destroy(SmeMsgReader *reader)
 {
-	int n_msgs, i;
-	MmcMsg **msg_array;
-	
-	//Destroy message queue
-	msg_array = msg_queue_head(reader->msg_queue);
-	n_msgs = msg_queue_size(reader->msg_queue);
-	for (i = 0; i < n_msgs; i++)
-	{
-		mmc_msg_unref(msg_array[i]);
-	}
-	msg_queue_destroy(reader->msg_queue);
+	//Destroy message in the buffer pointer
+	if (reader->msg_buf)
+		mmc_msg_unref(reader->msg_buf);
+	reader->msg_buf = NULL;
 	
 	if (reader->layout)
 		free(reader->layout);
@@ -383,7 +386,7 @@ static void sme_msg_reader_destroy(SmeMsgReader *reader)
 	free(reader);
 }
 
-SmeMsgReader *sme_msg_reader_new()
+SmeMsgReader *sme_msg_reader_new(SmeMsgReaderNotify notify)
 {
 	SmeMsgReader *reader;
 
@@ -391,10 +394,11 @@ SmeMsgReader *sme_msg_reader_new()
 
 	mdsl_rc_init(reader);
 
-	msg_queue_init(reader->msg_queue);
+	reader->msg_buf = NULL;
 	reader->state = READER_INACTIVE;
 	reader->layout = NULL;
 	reader->msg = NULL;
+	reader->notify = notify;
 
 	return reader;
 }
@@ -410,22 +414,3 @@ SmeJobSource sme_msg_reader_get_source(SmeMsgReader *reader)
 
 	return res;
 }
-
-int sme_msg_reader_get_queue_len(SmeMsgReader *reader)
-{
-	int res; 
-	res = msg_queue_size(reader->msg_queue);
-
-	if (res == 0 && reader->state == READER_ERROR)
-		return -1;
-
-	return res;
-}
-
-MmcMsg *sme_msg_reader_pop_msg(SmeMsgReader *reader)
-{
-	if (msg_queue_size(reader->msg_queue) == 0)
-		return NULL;
-	return msg_queue_pop(reader->msg_queue);
-}
-

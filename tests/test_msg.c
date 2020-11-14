@@ -188,11 +188,35 @@ void loop_channel_destroy(LoopChannel *ch)
 	(*ch->r_js.unset_channel)(ch->r_js.source_ptr);
 }
 
+//Test notify function
+typedef struct {
+	SmeMsgReaderNotify parent;
+	MmcMsg *buf;
+} TestReaderNotify;
+
+void test_reader_notify_call(MmcMsg *msg, void *data)
+{
+	TestReaderNotify *self = data;
+
+	sme_assert(!self->buf, "Capacity exceeded");
+	self->buf = msg;
+}
+
+void test_reader_notify_init(TestReaderNotify *self)
+{
+	self->parent.call = test_reader_notify_call;
+	self->parent.data = self;
+	self->buf = NULL;
+}
+
 //Test case function
 void testcase(MmcMsg *msg)
 {
+	TestReaderNotify recvd[1];
+	test_reader_notify_init(recvd);
+
 	SmeMsgWriter *writer = sme_msg_writer_new();
-	SmeMsgReader *reader = sme_msg_reader_new();
+	SmeMsgReader *reader = sme_msg_reader_new(recvd->parent);
 
 	LoopChannel channel[1];
 
@@ -207,7 +231,7 @@ void testcase(MmcMsg *msg)
 	int i;
 	for (i = 0; i < 15; i++)
 	{
-		if (sme_msg_reader_get_queue_len(reader) != 0)
+		if (recvd->buf)
 			break;
 
 		loop_channel_do_read(channel);
@@ -216,13 +240,9 @@ void testcase(MmcMsg *msg)
 	if (i == 15)
 		sme_error("Cannot finish reading message");
 
-	MmcMsg *msg_copy = sme_msg_reader_pop_msg(reader);
+	assert_equals_msg(msg, recvd->buf);
 
-	assert_equals_int(sme_msg_reader_get_queue_len(reader), 0);
-
-	assert_equals_msg(msg, msg_copy);
-
-	mmc_msg_unref(msg_copy);
+	mmc_msg_unref(recvd->buf);
 
 	loop_channel_destroy(channel);
 
