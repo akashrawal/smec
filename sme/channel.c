@@ -1,5 +1,5 @@
-/* msg.h
- * [De]Serialization of messages on streams
+/* channel.c
+ * Abstract channel for IO in form of sequence of bytes.
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -18,30 +18,20 @@
  * along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "incl.h"
+#include <string.h>
 
-//Uses protocol as described in ssc/msg.h
+//Reference counting
 
-//Message writer
-typedef struct _SmeMsgWriter SmeMsgWriter;
+mdsl_rc_define(SmeChannel, sme_channel);
 
-mdsl_rc_declare(SmeMsgWriter, sme_msg_writer);
+void sme_channel_init(SmeChannel* channel)
+{
+	memset(channel, 0, sizeof(SmeChannel));
+	mdsl_rc_init(channel);
+}
 
-SmeMsgWriter *sme_msg_writer_new(SmeChannel *channel);
-
-void sme_msg_writer_add_msg(SmeMsgWriter *writer, MmcMsg *msg);
-
-int sme_msg_writer_get_queue_len(SmeMsgWriter *writer);
-
-
-//Message reader
-typedef struct _SmeMsgReader SmeMsgReader;
-
-typedef struct {
-	void (* call)(MmcMsg *msg, void *data);
-	void *data;	
-} SmeMsgReaderNotify;
-
-mdsl_rc_declare(SmeMsgReader, sme_msg_reader);
-
-SmeMsgReader *sme_msg_reader_new
-	(SmeChannel *channel, SmeMsgReaderNotify notify);
+static void sme_channel_destroy(SmeChannel* channel)
+{
+	(* channel->destroy)(channel);
+}

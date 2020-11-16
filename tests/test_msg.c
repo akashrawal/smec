@@ -66,6 +66,8 @@ typedef struct
 
 typedef struct 
 {
+	SmeChannel parent;
+
 	int rmark, wmark;
 	char data[MAX_IO];
 
@@ -74,11 +76,12 @@ typedef struct
 	ReadSeg read_segs[MAX_SEG];
 	int n_read_segs;
 
-	SmeChannel w_if, r_if;
 	SmeJobSource w_js, r_js;
 } LoopChannel;
 
-void loop_channel_add_write_job(void *ptr, SscMBlock *blocks, size_t n_blocks)
+
+void loop_channel_add_write_job
+	(SmeChannel* ptr, SscMBlock *blocks, size_t n_blocks)
 {
 	LoopChannel *ch = (LoopChannel*) ptr;	
 
@@ -102,7 +105,20 @@ void loop_channel_add_write_job(void *ptr, SscMBlock *blocks, size_t n_blocks)
 	ch->wcomp++;
 }
 
-void loop_channel_add_read_job(void *ptr, SscMBlock *blocks, size_t n_blocks)
+ssize_t loop_channel_do_write(SmeChannel *ptr)
+{
+	LoopChannel *ch = (LoopChannel*) ptr;	
+	if (ch->wcomp)
+	{
+		(* ch->w_js.notify)(ch->w_js.source_ptr, ch->wcomp);
+		ch->wcomp = 0;
+	}
+
+	return 1;
+}
+
+void loop_channel_add_read_job
+	(SmeChannel *ptr, SscMBlock *blocks, size_t n_blocks)
 {
 	LoopChannel *ch = (LoopChannel*) ptr;	
 
@@ -112,15 +128,14 @@ void loop_channel_add_read_job(void *ptr, SscMBlock *blocks, size_t n_blocks)
 	{
 		jobseg[i].block = blocks[i];
 		jobseg[i].compl = 0;
-
-
 	}
 	jobseg[n_blocks].compl = 1;
 	ch->n_read_segs += n_blocks + 1;
 }
 
-void loop_channel_do_read(LoopChannel *ch)
+ssize_t loop_channel_do_read(SmeChannel *ptr)
 {
+	LoopChannel *ch = (LoopChannel*) ptr;	
 	int i, j;
 	for (i = 0; i < ch->n_read_segs; i++)
 	{
@@ -148,44 +163,64 @@ void loop_channel_do_read(LoopChannel *ch)
 
 	ch->n_read_segs = 0;
 
-}
-
-void loop_channel_notify(LoopChannel *ch)
-{
-	if (ch->wcomp)
-	{
-		(* ch->w_js.notify)(ch->w_js.source_ptr, ch->wcomp);
-		ch->wcomp = 0;
-	}
 	if (ch->rcomp)
 	{
 		(* ch->r_js.notify)(ch->r_js.source_ptr, ch->rcomp);
 		ch->rcomp = 0;
 	}
+
+	return 1;
 }
 
-void loop_channel_init(LoopChannel *ch, SmeJobSource w_js, SmeJobSource r_js)
+void loop_channel_destroy(SmeChannel* ptr)
 {
+
+}
+
+void loop_channel_set_read_source
+	(SmeChannel *ptr, SmeJobSource r_js)
+{
+	LoopChannel *ch = (LoopChannel*) ptr;	
+	ch->r_js = r_js;
+}
+
+void loop_channel_unset_read_source
+	(SmeChannel *ptr)
+{
+	//LoopChannel *ch = (LoopChannel*) ptr;	
+}
+
+void loop_channel_set_write_source
+	(SmeChannel *ptr, SmeJobSource w_js)
+{
+	LoopChannel *ch = (LoopChannel*) ptr;	
+	ch->w_js = w_js;
+}
+
+void loop_channel_unset_write_source
+	(SmeChannel *ptr)
+{
+	//LoopChannel *ch = (LoopChannel*) ptr;	
+}
+
+void loop_channel_init(LoopChannel *ch)
+{
+	sme_channel_init((SmeChannel*) ch);
+
 	ch->rmark = ch->wmark = 0;
 	ch->rcomp = ch->wcomp = 0;
 
 	ch->n_read_segs = 0;
 
-	ch->w_js = w_js;	
-	ch->w_if.channel_ptr = ch;
-	ch->w_if.add_job = loop_channel_add_write_job;
-	(* ch->w_js.set_channel)(ch->w_js.source_ptr, ch->w_if);
-
-	ch->r_js = r_js;	
-	ch->r_if.channel_ptr = ch;
-	ch->r_if.add_job = loop_channel_add_read_job;
-	(* ch->r_js.set_channel)(ch->r_js.source_ptr, ch->r_if);
-}
-
-void loop_channel_destroy(LoopChannel *ch)
-{
-	(*ch->w_js.unset_channel)(ch->w_js.source_ptr);
-	(*ch->r_js.unset_channel)(ch->r_js.source_ptr);
+	ch->parent.destroy = loop_channel_destroy;
+	ch->parent.set_read_source = loop_channel_set_read_source;
+	ch->parent.unset_read_source = loop_channel_unset_read_source;
+	ch->parent.set_write_source = loop_channel_set_write_source;
+	ch->parent.unset_write_source = loop_channel_unset_write_source;
+	ch->parent.add_read_job = loop_channel_add_read_job;
+	ch->parent.add_write_job = loop_channel_add_write_job;
+	ch->parent.read = loop_channel_do_read;
+	ch->parent.write = loop_channel_do_write;
 }
 
 //Test notify function
@@ -215,17 +250,16 @@ void testcase(MmcMsg *msg)
 	TestReaderNotify recvd[1];
 	test_reader_notify_init(recvd);
 
-	SmeMsgWriter *writer = sme_msg_writer_new();
-	SmeMsgReader *reader = sme_msg_reader_new(recvd->parent);
-
 	LoopChannel channel[1];
+	loop_channel_init(channel);
 
-	loop_channel_init(channel, 
-			sme_msg_writer_get_source(writer),
-			sme_msg_reader_get_source(reader));
+	SmeMsgWriter *writer = sme_msg_writer_new((SmeChannel*) channel);
+	SmeMsgReader *reader = sme_msg_reader_new
+		((SmeChannel*) channel, recvd->parent);
+
 
 	sme_msg_writer_add_msg(writer, msg);
-	loop_channel_notify(channel);
+	sme_channel_write((SmeChannel*) channel);
 	assert_equals_int(sme_msg_writer_get_queue_len(writer), 0);
 
 	int i;
@@ -234,8 +268,7 @@ void testcase(MmcMsg *msg)
 		if (recvd->buf)
 			break;
 
-		loop_channel_do_read(channel);
-		loop_channel_notify(channel);
+		sme_channel_read((SmeChannel*) channel);
 	}
 	if (i == 15)
 		sme_error("Cannot finish reading message");
@@ -244,7 +277,7 @@ void testcase(MmcMsg *msg)
 
 	mmc_msg_unref(recvd->buf);
 
-	loop_channel_destroy(channel);
+	sme_channel_unref((SmeChannel*) channel);
 
 	sme_msg_reader_unref(reader);
 	sme_msg_writer_unref(writer);

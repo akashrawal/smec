@@ -21,13 +21,6 @@
 #include "incl.h"
 
 
-typedef enum
-{
-	WRITER_INACTIVE, 
-	WRITER_ACTIVE, 
-	WRITER_DISPOSED
-} WriterState;
-
 //Message writer
 
 typedef struct
@@ -42,39 +35,11 @@ struct _SmeMsgWriter
 {
 	MdslRC parent;
 
-	WriterState state;
-	SmeChannel channel;
+	SmeChannel *channel;
 	WriterJobQueue job_queue[1];
 };
 
 //
-static void sme_msg_writer_set_channel_fn
-	(void *source_ptr, SmeChannel channel)
-{
-	SmeMsgWriter *writer = source_ptr;
-
-	if (writer->state != WRITER_INACTIVE)
-		sme_error("Cannot set channel more than once");
-
-	sme_msg_writer_ref(writer); //Reference is owned by the channel. 
-	writer->state = WRITER_ACTIVE;
-	writer->channel = channel;
-}
-
-static void sme_msg_writer_unset_channel_fn(void *source_ptr)
-{
-	SmeMsgWriter *writer = source_ptr;
-
-	if (writer->state == WRITER_ACTIVE)
-	{
-		writer->state = WRITER_DISPOSED;
-		sme_msg_writer_unref(writer);
-	}
-	else if (writer->state == WRITER_INACTIVE) 
-		sme_error("Cannot unset channel when no channel is set");
-	else 
-		sme_error("Cannot unset channel more than one");
-}
 
 static void sme_msg_writer_notify_fn(void *source_ptr, int n_jobs)
 {
@@ -96,6 +61,11 @@ static void sme_msg_writer_destroy(SmeMsgWriter *writer)
 	int i, len;
 	WriterJob *jobs;
 
+	//Unref channel
+	sme_channel_unset_write_source(writer->channel);	
+	sme_channel_unref(writer->channel);
+	writer->channel = NULL;
+
 	//Destroy job queue
 	len = writer_job_queue_size(writer->job_queue);
 	jobs = writer_job_queue_head(writer->job_queue);
@@ -109,30 +79,24 @@ static void sme_msg_writer_destroy(SmeMsgWriter *writer)
 	free(writer);
 }
 
-SmeMsgWriter *sme_msg_writer_new()
+SmeMsgWriter *sme_msg_writer_new(SmeChannel *channel)
 {
 	SmeMsgWriter *writer;
+	SmeJobSource js;
 
 	writer = (SmeMsgWriter *) mdsl_alloc(sizeof(SmeMsgWriter));
 
 	mdsl_rc_init(writer);
 	
-	writer->state = WRITER_INACTIVE;
 	writer_job_queue_init(writer->job_queue); 
 
+	sme_channel_ref(channel);
+	writer->channel = channel;
+	js.source_ptr = writer;
+	js.notify = sme_msg_writer_notify_fn;
+	sme_channel_set_write_source(channel, js);	
+
 	return writer;
-}
-
-SmeJobSource sme_msg_writer_get_source(SmeMsgWriter *writer)
-{
-	SmeJobSource res;
-
-	res.source_ptr = writer;
-	res.set_channel = sme_msg_writer_set_channel_fn;
-	res.unset_channel = sme_msg_writer_unset_channel_fn;
-	res.notify = sme_msg_writer_notify_fn;
-
-	return res;
 }
 
 void sme_msg_writer_add_msg(SmeMsgWriter *writer, MmcMsg *msg)
@@ -142,9 +106,6 @@ void sme_msg_writer_add_msg(SmeMsgWriter *writer, MmcMsg *msg)
 
 	WriterJob new_job;
 	SscMBlock *iov;
-
-	if (writer->state != WRITER_ACTIVE)
-		sme_error("Associate with channel before adding messages. ");
 
 	//Create job
 	new_job.msg = msg;
@@ -166,8 +127,7 @@ void sme_msg_writer_add_msg(SmeMsgWriter *writer, MmcMsg *msg)
 	writer_job_queue_push(writer->job_queue, new_job);
 
 	//Assign job to channel
-	(* writer->channel.add_job)
-		(writer->channel.channel_ptr, iov, n_blocks + 1);
+	sme_channel_add_write_job(writer->channel, iov, n_blocks + 1);
 
 	//Free
 	free(iov);
@@ -197,7 +157,7 @@ struct _SmeMsgReader
 
 
 	ReaderState state;
-	SmeChannel channel;
+	SmeChannel *channel;
 
 	MmcMsg *msg_buf;
 
@@ -212,17 +172,13 @@ struct _SmeMsgReader
 //
 static void sme_msg_reader_goto_read_size(SmeMsgReader *reader)
 {
-	SmeChannel c = reader->channel;
-
 	SscMBlock iov = {&(reader->d), sizeof(uint32_t)};
 	reader->state = READER_READ_SIZE;
-	(*c.add_job)(c.channel_ptr, &iov, 1);
+	sme_channel_add_read_job(reader->channel, &iov, 1);
 }
 
 static void sme_msg_reader_advance(SmeMsgReader *reader)
 {
-	SmeChannel c = reader->channel;
-
 	if (reader->state == READER_READ_SIZE)
 	{
 		uint32_t size;
@@ -247,7 +203,7 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 		reader->state = READER_READ_LAYOUT;
 
 		//Add job
-		(*c.add_job)(c.channel_ptr, &iov, 1);
+		sme_channel_add_read_job(reader->channel, &iov, 1);
 	}
 	else if (reader->state == READER_READ_LAYOUT)
 	{
@@ -297,7 +253,7 @@ static void sme_msg_reader_advance(SmeMsgReader *reader)
 			reader->state = READER_READ_MSG;
 			
 			//Add job
-			(*c.add_job)(c.channel_ptr, iov, n_blocks);
+			sme_channel_add_read_job(reader->channel, iov, n_blocks);
 		}
 
 		//Cleanup
@@ -322,35 +278,6 @@ fail:
 	reader->state = READER_ERROR;
 }
 
-//
-static void sme_msg_reader_set_channel_fn
-	(void *source_ptr, SmeChannel channel)
-{
-	SmeMsgReader *reader = source_ptr;
-
-	if (reader->state != READER_INACTIVE)
-		sme_error("Cannot set channel more than once");
-
-	reader->channel = channel;
-	sme_msg_reader_ref(reader); //Reference is owned by the channel. 
-	sme_msg_reader_goto_read_size(reader);
-}
-
-static void sme_msg_reader_unset_channel_fn(void *source_ptr)
-{
-	SmeMsgReader *reader = source_ptr;
-
-	if (reader->state == READER_INACTIVE) 
-		sme_error("Cannot unset channel when no channel is set");
-	else if (reader->state == READER_DISPOSED)
-		sme_error("Cannot unset channel more than once");
-	else
-	{
-		reader->state = READER_DISPOSED;
-		sme_msg_reader_unref(reader);
-	}
-}
-
 static void sme_msg_reader_notify_fn(void *source_ptr, int n_jobs)
 {
 	SmeMsgReader *reader = source_ptr;
@@ -373,6 +300,11 @@ mdsl_rc_define(SmeMsgReader, sme_msg_reader);
 
 static void sme_msg_reader_destroy(SmeMsgReader *reader)
 {
+	//Unref the channel
+	sme_channel_unset_read_source(reader->channel);	
+	sme_channel_unref(reader->channel);
+	reader->channel = NULL;
+
 	//Destroy message in the buffer pointer
 	if (reader->msg_buf)
 		mmc_msg_unref(reader->msg_buf);
@@ -386,8 +318,10 @@ static void sme_msg_reader_destroy(SmeMsgReader *reader)
 	free(reader);
 }
 
-SmeMsgReader *sme_msg_reader_new(SmeMsgReaderNotify notify)
+SmeMsgReader *sme_msg_reader_new
+	(SmeChannel *channel, SmeMsgReaderNotify notify)
 {
+	SmeJobSource js;
 	SmeMsgReader *reader;
 
 	reader = (SmeMsgReader *) mdsl_alloc(sizeof(SmeMsgReader));
@@ -395,22 +329,18 @@ SmeMsgReader *sme_msg_reader_new(SmeMsgReaderNotify notify)
 	mdsl_rc_init(reader);
 
 	reader->msg_buf = NULL;
-	reader->state = READER_INACTIVE;
 	reader->layout = NULL;
 	reader->msg = NULL;
 	reader->notify = notify;
 
+	sme_channel_ref(channel);
+	reader->channel = channel;
+
+	js.source_ptr = reader;
+	js.notify = sme_msg_reader_notify_fn;
+	sme_channel_set_read_source(reader->channel, js);	
+
+	sme_msg_reader_goto_read_size(reader);
+
 	return reader;
-}
-
-SmeJobSource sme_msg_reader_get_source(SmeMsgReader *reader)
-{
-	SmeJobSource res;
-
-	res.source_ptr = reader;
-	res.set_channel = sme_msg_reader_set_channel_fn;
-	res.unset_channel = sme_msg_reader_unset_channel_fn;
-	res.notify = sme_msg_reader_notify_fn;
-
-	return res;
 }

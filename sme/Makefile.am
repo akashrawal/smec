@@ -10,7 +10,8 @@ lib_LTLIBRARIES = libsme.la
 #
 #EXTRA_DIST = simple_router.mdl
 
-sme_c = msg.c \
+sme_c = channel.c \
+		msg.c \
 		fd_channel.c
 
 sme_h =	sme.h \

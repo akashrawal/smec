@@ -154,9 +154,9 @@ static void generate_programs_rec(int parent, int io_avail, int depth_avail,
 //Mock job source
 typedef struct
 {
-	SmeChannel channel;
+	SmeChannel *channel;
+	int write;
 	SmeJobSource iface;
-	int active;
 	int submitted_jobs;
 	int completed_jobs;
 	int used_blk;
@@ -166,20 +166,6 @@ typedef struct
 	int iosize;
 } MockJobSource;
 
-static void mock_job_source_set_channel(void *jsptr, SmeChannel channel)
-{
-	MockJobSource *jobsource = (MockJobSource *) jsptr;
-
-	jobsource->channel = channel;
-	jobsource->active = 1;
-}
-
-static void mock_job_source_unset_channel(void *jsptr)
-{
-	MockJobSource *jobsource = (MockJobSource *) jsptr;
-	jobsource->active = 0;
-}
-
 static void mock_job_source_notify(void *jsptr, int n_jobs)
 {
 	MockJobSource *jobsource = (MockJobSource *) jsptr;
@@ -187,14 +173,11 @@ static void mock_job_source_notify(void *jsptr, int n_jobs)
 	jobsource->completed_jobs += n_jobs;
 }
 
-static void mock_job_source_init(MockJobSource *jobsource)
+static void mock_job_source_init
+	(MockJobSource *jobsource, SmeChannel *channel, int write)
 {
-	jobsource->iface.source_ptr = jobsource;
-	jobsource->iface.set_channel = mock_job_source_set_channel;
-	jobsource->iface.unset_channel = mock_job_source_unset_channel;
-	jobsource->iface.notify = mock_job_source_notify;
-
-	jobsource->active = 0;
+	jobsource->channel = channel;
+	jobsource->write = write;
 	jobsource->submitted_jobs = 0;
 	jobsource->completed_jobs = 0;
 	jobsource->used_blk = 0;
@@ -203,6 +186,13 @@ static void mock_job_source_init(MockJobSource *jobsource)
 	int i;
 	for (i = 0; i <= MAX_DEPTH; i++)
 		jobsource->jobsizes[i] = 0;
+
+	jobsource->iface.source_ptr = jobsource;
+	jobsource->iface.notify = mock_job_source_notify;
+	if (write)
+		sme_channel_set_write_source(channel, jobsource->iface);
+	else
+		sme_channel_set_read_source(channel, jobsource->iface);
 }
 
 static void mock_job_source_add_blk(MockJobSource *jobsource,
@@ -220,8 +210,10 @@ static void mock_job_source_add_job(MockJobSource *jobsource)
 	int n_blocks = jobsource->used_blk;
 	if (! n_blocks)
 		blocks = NULL;
-	(*jobsource->channel.add_job)(jobsource->channel.channel_ptr,
-			blocks, n_blocks);
+	if (jobsource->write)
+		sme_channel_add_write_job(jobsource->channel, blocks, n_blocks);
+	else
+		sme_channel_add_read_job(jobsource->channel, blocks, n_blocks);
 
 	jobsource->used_blk = 0;
 	jobsource->submitted_jobs++;
@@ -315,13 +307,11 @@ static void start_test_case()
 	io_used = 0;
 	memset(read_buf, 0, MAX_IO);
 
-	mock_io_init();
-	mock_job_source_init(read_source);
-	mock_job_source_init(write_source);
-
 	channel = sme_fd_channel_new(-1);
-	sme_fd_channel_set_write_source(channel, write_source->iface);
-	sme_fd_channel_set_read_source(channel, read_source->iface);
+
+	mock_io_init();
+	mock_job_source_init(read_source, (SmeChannel*) channel, 0);
+	mock_job_source_init(write_source, (SmeChannel*) channel, 1);
 }
 
 static void op_add_seg(int size)
@@ -351,7 +341,6 @@ static void op_io(int size)
 	//Write:
 	mock_io_size = size;
 	sme_fd_channel_test_write(channel, mock_io_writev);
-	sme_fd_channel_inform_write_completion(channel);
 	assert_equals_int(mock_io_size, 0);
 	mock_job_source_inform_io(write_source, size);
 	
@@ -359,7 +348,6 @@ static void op_io(int size)
 	//Read:
 	mock_io_size = size;
 	sme_fd_channel_test_read(channel, mock_io_readv);
-	sme_fd_channel_inform_read_completion(channel);
 	assert_equals_int(mock_io_size, 0);
 	mock_job_source_inform_io(read_source, size);
 }
@@ -388,10 +376,7 @@ static void end_test_case(int io_size)
 		}
 	}
 
-	sme_fd_channel_unref(channel);
-
-	assert_equals_int(write_source->active, 0);
-	assert_equals_int(read_source->active, 0);
+	sme_channel_unref((SmeChannel*) channel);
 }
 
 int main()

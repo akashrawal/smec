@@ -1,5 +1,5 @@
- /* channel.h
- * Fully managed interface to perform vectored IO over stream-like backends
+ /* fd_channel.h
+ * Manages vectored IO over a file descriptor.
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -19,32 +19,18 @@
  */
 
 
-//Implementation for file descriptor backend using libevent
+//Implementation for file descriptor backend using libev
 typedef struct _SmeFdChannel SmeFdChannel;
-
-mdsl_rc_declare(SmeFdChannel, sme_fd_channel);
 
 
 SmeFdChannel *sme_fd_channel_new(int fd);
 
 
 //Writing
-void sme_fd_channel_set_write_source
-	(SmeFdChannel *channel, SmeJobSource source);
-
-ssize_t sme_fd_channel_write(SmeFdChannel *channel);
-
-void sme_fd_channel_inform_write_completion(SmeFdChannel *channel);
 
 int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel);
 
 //Reading
-void sme_fd_channel_set_read_source
-	(SmeFdChannel *channel, SmeJobSource source);
-
-ssize_t sme_fd_channel_read(SmeFdChannel *channel);
-
-void sme_fd_channel_inform_read_completion(SmeFdChannel *channel);
 
 int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel);
 

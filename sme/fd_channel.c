@@ -1,5 +1,5 @@
- /* channel.c
- * Fully managed interface to perform vectored IO over stream-like backends
+ /* fd_channel.c
+ * Manages vectored IO over a file descriptor.
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -40,7 +40,7 @@ typedef struct
 
 struct _SmeFdChannel
 {
-	MdslRC parent;
+	SmeChannel parent;
 	int fd;
 
 	ChannelLane write[1], read[1];
@@ -53,7 +53,7 @@ static void channel_lane_init(ChannelLane *lane)
 	lane->enabled = 0;
 }
 
-static void channel_lane_add_job_fn
+static void channel_lane_add_job
 	(void *ptr, SscMBlock *blocks, size_t n_blocks)
 {
 	ChannelLane *lane = ptr;
@@ -71,11 +71,9 @@ static void channel_lane_add_job_fn
 	int_queue_push(lane->compl, (int) n_blocks);
 }
 
-static void channel_lane_set_source
+static void channel_lane_enable
 	(ChannelLane *lane, SmeJobSource source)
 {
-	SmeChannel vtable = {lane, channel_lane_add_job_fn};
-
 	if (lane->enabled)
 	{
 		sme_error("Cannot set source more than once");	
@@ -86,17 +84,12 @@ static void channel_lane_set_source
 	lane->n_pending_compl = 0;
 	iov_queue_init(lane->iov);
 	int_queue_init(lane->compl);
-
-	if (source.set_channel)
-		(*source.set_channel)(source.source_ptr, vtable); 
 }
 
 static void channel_lane_disable(ChannelLane *lane)
 {
 	if (lane->enabled)
 	{
-		if (lane->source.unset_channel)
-			(*lane->source.unset_channel)(lane->source.source_ptr);
 		lane->enabled = 0;
 		iov_queue_destroy(lane->iov);
 		int_queue_destroy(lane->compl);
@@ -140,8 +133,10 @@ static void channel_lane_pop_bytes(ChannelLane *lane, size_t n_bytes)
 	job = i;
 	int_queue_pop_n(lane->compl, job);
 
-	//Add finished jobs to pending completions
-	lane->n_pending_compl += job;
+	//Inform completions
+	if (job > 0)
+		(* lane->source.notify)
+			(lane->source.source_ptr, job);
 }
 
 #define channel_lane_io(lane, fd, fn, iov_max, res) \
@@ -156,25 +151,96 @@ do { \
 		channel_lane_pop_bytes(lane, res); \
 } while (0)
 
-static void channel_lane_inform_completion(ChannelLane *lane)
-{
-	if (lane->n_pending_compl)
-	{
-		int inform_compl = lane->n_pending_compl;
-		lane->n_pending_compl = 0;
-		if (lane->source.notify)
-			(* lane->source.notify)
-				(lane->source.source_ptr, inform_compl);
-	}
-}
-
 static int channel_lane_get_queue_len(ChannelLane *lane)
 {
 	return int_queue_size(lane->compl);
 }
 
-//Channel functions
-mdsl_rc_define(SmeFdChannel, sme_fd_channel);
+//Virtual function implementations
+static void sme_fd_channel_destroy(SmeChannel *base_type)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+
+	channel_lane_disable(channel->write);
+	channel_lane_disable(channel->read);
+
+	free(channel);
+}
+
+static void sme_fd_channel_set_write_source
+	(SmeChannel *base_type, SmeJobSource source)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+
+	channel_lane_enable(channel->write, source);
+}
+
+static void sme_fd_channel_unset_write_source(SmeChannel *base_type)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+
+	channel_lane_disable(channel->write);
+}
+
+static void sme_fd_channel_add_write_job
+	(SmeChannel *base_type, SscMBlock *blocks, size_t n_blocks)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+
+	channel_lane_add_job(channel->write, blocks, n_blocks);	
+}
+
+static ssize_t sme_fd_channel_write(SmeChannel *base_type)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+	ssize_t res;
+	channel_lane_io
+		(channel->write, channel->fd, writev, channel->iov_max, res);
+	return res;
+}
+
+
+static void sme_fd_channel_set_read_source
+	(SmeChannel *base_type, SmeJobSource source)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+	channel_lane_enable(channel->read, source);
+}
+
+static void sme_fd_channel_unset_read_source(SmeChannel *base_type)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+	channel_lane_disable(channel->read);
+}
+
+static void sme_fd_channel_add_read_job
+	(SmeChannel *base_type, SscMBlock *blocks, size_t n_blocks)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+
+	channel_lane_add_job(channel->read, blocks, n_blocks);	
+}
+
+static ssize_t sme_fd_channel_read(SmeChannel *base_type)
+{
+	SmeFdChannel *channel = (SmeFdChannel *) base_type;
+	ssize_t res;
+	channel_lane_io
+		(channel->read, channel->fd, readv, channel->iov_max, res);
+	return res;
+}
+
+//Writing
+int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel)
+{
+	return channel_lane_get_queue_len(channel->write);
+}
+
+//Reading
+int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel)
+{
+	return channel_lane_get_queue_len(channel->read);
+}
 
 SmeFdChannel *sme_fd_channel_new(int fd)
 {
@@ -182,7 +248,7 @@ SmeFdChannel *sme_fd_channel_new(int fd)
 
 	channel = (SmeFdChannel *) mdsl_alloc(sizeof(SmeFdChannel));
 
-	mdsl_rc_init(channel);
+	sme_channel_init((SmeChannel*) channel);
 
 	channel->fd = fd;
 
@@ -193,69 +259,22 @@ SmeFdChannel *sme_fd_channel_new(int fd)
 	channel->iov_max = sysconf(_SC_IOV_MAX);
 #endif
 
+	//Initialize lanes
 	channel_lane_init(channel->write);
 	channel_lane_init(channel->read);
 	
+	//Setup virtual functions
+	channel->parent.destroy = sme_fd_channel_destroy;
+	channel->parent.set_read_source = sme_fd_channel_set_read_source;
+	channel->parent.unset_read_source = sme_fd_channel_unset_read_source;
+	channel->parent.set_write_source = sme_fd_channel_set_write_source;
+	channel->parent.unset_write_source = sme_fd_channel_unset_write_source;
+	channel->parent.add_read_job = sme_fd_channel_add_read_job;
+	channel->parent.add_write_job = sme_fd_channel_add_write_job;
+	channel->parent.read = sme_fd_channel_read;
+	channel->parent.write = sme_fd_channel_write;
 
 	return channel;
-}
-
-static void sme_fd_channel_destroy(SmeFdChannel *channel)
-{
-	channel_lane_disable(channel->write);
-	channel_lane_disable(channel->read);
-
-	free(channel);
-}
-
-//Writing
-void sme_fd_channel_set_write_source
-	(SmeFdChannel *channel, SmeJobSource source)
-{
-	channel_lane_set_source(channel->write, source);
-}
-
-ssize_t sme_fd_channel_write(SmeFdChannel *channel)
-{
-	ssize_t res;
-	channel_lane_io
-		(channel->write, channel->fd, writev, channel->iov_max, res);
-	return res;
-}
-
-void sme_fd_channel_inform_write_completion(SmeFdChannel *channel)
-{
-	channel_lane_inform_completion(channel->write);
-}
-
-int sme_fd_channel_get_write_queue_len(SmeFdChannel *channel)
-{
-	return channel_lane_get_queue_len(channel->write);
-}
-
-//Reading
-void sme_fd_channel_set_read_source
-	(SmeFdChannel *channel, SmeJobSource source)
-{
-	channel_lane_set_source(channel->read, source);
-}
-
-ssize_t sme_fd_channel_read(SmeFdChannel *channel)
-{
-	ssize_t res;
-	channel_lane_io
-		(channel->read, channel->fd, readv, channel->iov_max, res);
-	return res;
-}
-
-void sme_fd_channel_inform_read_completion(SmeFdChannel *channel)
-{
-	channel_lane_inform_completion(channel->read);
-}
-
-int sme_fd_channel_get_read_queue_len(SmeFdChannel *channel)
-{
-	return channel_lane_get_queue_len(channel->read);
 }
 
 //Testing
