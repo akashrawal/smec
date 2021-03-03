@@ -164,6 +164,8 @@ static void sme_fd_channel_destroy(SmeChannel *base_type)
 	channel_lane_disable(channel->write);
 	channel_lane_disable(channel->read);
 
+	sme_channel_cleanup(base_type);
+
 	free(channel);
 }
 

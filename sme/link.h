@@ -1,5 +1,5 @@
-/* incl.h
- * Includes
+/* link.h
+ * Abstract link for sending and receiving messages.
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -18,31 +18,32 @@
  * along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//TODO: Decide the includes in API headers
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <sys/uio.h>
+typedef struct _SmeLink SmeLink;
 
-#include <ev.h>
 
-#include <mdsl/mdsl.h>
-#include <mmc/mmc.h>
-#include <ssc/ssc.h>
+//Link base class
+struct _SmeLink
+{
+	MdslRC parent;
 
-//Include all modules in dependency-based order
+	//TODO: Address space
 
-#include "channel.h"
-#include "msg.h"
-#include "fd_channel.h"
-#include "address.h"
-#include "link.h"
-#include "channel_link.h"
+	//Virtual functions
+	void (*destroy) (SmeLink *link);
+	void (*send) (SmeLink *link, MmcMsg *msg);
+};
 
-#define sme_error(...) mdsl_context_error("SME", __VA_ARGS__)
-#define sme_warn(...) mdsl_context_warn("SME", __VA_ARGS__) 
-#define sme_debug(...) mdsl_context_debug("SME", __VA_ARGS__) 
-#define sme_assert(...) mdsl_context_assert("SME", __VA_ARGS__) 
-	//
+mdsl_rc_declare(SmeLink, sme_link);
+
+static inline void sme_link_send(SmeLink *link, MmcMsg *msg)
+{
+	(* link->send)(link, msg);
+}
+
+void sme_link_receive(SmeLink *link, MmcMsg *msg);
+
+void sme_link_cleanup(SmeLink *link);
+
+void sme_link_init(SmeLink *link);
+
+

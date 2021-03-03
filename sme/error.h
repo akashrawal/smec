@@ -1,5 +1,5 @@
-/* incl.h
- * Includes
+/* msg.h
+ * Error domain mechanism
  * 
  * Copyright 2015-2020 Akash Rawal
  * This file is part of Modular Middleware.
@@ -18,31 +18,20 @@
  * along with Modular Middleware.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-//TODO: Decide the includes in API headers
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
-#include <sys/types.h>
-#include <sys/uio.h>
 
-#include <ev.h>
+//Error domain definition
+typedef struct _SmeErrorDomain SmeErrorDomain;
+struct _SmeErrorDomain {
+	const char *domain_name;
+	char* (*strerror_as)(SmeErrorDomain* domain, int code);
+	int (*write)(SmeErrorDomain *domain, int code, FILE *stream);
+};
 
-#include <mdsl/mdsl.h>
-#include <mmc/mmc.h>
-#include <ssc/ssc.h>
+//Error domain functions
+char* sme_error_domain_strerror_as(SmeErrorDomain *domain, int code);
+char* sme_error_domain_strerror_a(SmeErrorDomain *domain, int code);
+int sme_error_domain_write
+	(SmeErrorDomain *domain, int code, FILE *stream);
+void sme_error_domain_perror
+	(SmeErrorDomain *domain, int code, const char* message);
 
-//Include all modules in dependency-based order
-
-#include "channel.h"
-#include "msg.h"
-#include "fd_channel.h"
-#include "address.h"
-#include "link.h"
-#include "channel_link.h"
-
-#define sme_error(...) mdsl_context_error("SME", __VA_ARGS__)
-#define sme_warn(...) mdsl_context_warn("SME", __VA_ARGS__) 
-#define sme_debug(...) mdsl_context_debug("SME", __VA_ARGS__) 
-#define sme_assert(...) mdsl_context_assert("SME", __VA_ARGS__) 
-	//

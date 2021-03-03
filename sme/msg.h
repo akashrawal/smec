@@ -37,6 +37,7 @@ int sme_msg_writer_get_queue_len(SmeMsgWriter *writer);
 typedef struct _SmeMsgReader SmeMsgReader;
 
 typedef struct {
+	//TODO: Document that this function owns reference of the message.
 	void (* call)(MmcMsg *msg, void *data);
 	void *data;	
 } SmeMsgReaderNotify;

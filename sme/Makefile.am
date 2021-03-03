@@ -12,13 +12,19 @@ lib_LTLIBRARIES = libsme.la
 
 sme_c = channel.c \
 		msg.c \
-		fd_channel.c
+		fd_channel.c \
+		address.c \
+		link.c \
+		channel_link.c
 
 sme_h =	sme.h \
         incl.h \
 		channel.h \
 		msg.h \
-		fd_channel.h
+		fd_channel.h \
+		address.h \
+		link.h \
+		channel_link.h
 
 libsme_la_SOURCES = $(sme_c) $(sme_h)
 #nodist_libsme_la_SOURCES = 

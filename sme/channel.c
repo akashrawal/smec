@@ -25,10 +25,17 @@
 
 mdsl_rc_define(SmeChannel, sme_channel);
 
+void sme_channel_cleanup(SmeChannel *channel)
+{
+
+}
+
 void sme_channel_init(SmeChannel* channel)
 {
 	memset(channel, 0, sizeof(SmeChannel));
 	mdsl_rc_init(channel);
+
+	channel->destroy = sme_channel_cleanup;
 }
 
 static void sme_channel_destroy(SmeChannel* channel)

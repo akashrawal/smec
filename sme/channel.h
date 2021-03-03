@@ -29,6 +29,13 @@ typedef struct
 	void (*notify)(void *source_ptr, int n_jobs);
 } SmeJobSource;
 
+//Interface to handle event driven IO failures.
+typedef struct
+{
+	void *ptr;
+	void (*failed) (SmeChannel *channel, void *ptr);
+} SmeChannelCB;
+
 
 //Channel base class
 struct _SmeChannel
@@ -37,6 +44,9 @@ struct _SmeChannel
 
 	//Virtual functions
 	void (*destroy) (SmeChannel *channel);
+	void (*close) (SmeChannel *channel);
+	int (*is_closed) (SmeChannel *channel);
+	int (*is_failed) (SmeChannel *channel);
 	void (*set_read_source)
 		(SmeChannel *channel, SmeJobSource source);
 	void (*unset_read_source) (SmeChannel *channel);
@@ -49,6 +59,8 @@ struct _SmeChannel
 		(SmeChannel *channel, SscMBlock *blocks, size_t n_blocks);
 	ssize_t (*read) (SmeChannel *channel);
 	ssize_t (*write) (SmeChannel *channel);
+	void (*attach)(SmeChannel *channel, struct ev_loop *loop);
+	void (*detach)(SmeChannel *channel);
 };
 
 mdsl_rc_declare(SmeChannel, sme_channel);
@@ -97,4 +109,18 @@ static inline ssize_t sme_channel_write (SmeChannel *channel)
 	return (* channel->write)(channel);
 }
 
+static inline void sme_channel_attach
+	(SmeChannel *channel, struct ev_loop *loop)
+{
+	(* channel->attach)(channel, loop);
+}
+
+static inline void sme_channel_detach (SmeChannel *channel)
+{
+	(* channel->detach)(channel);
+}
+
+void sme_channel_cleanup(SmeChannel *channel);
+
 void sme_channel_init(SmeChannel *channel);
+
